@@ -11,15 +11,19 @@ router.post('/', upload.array('images', 10), async (req, res) => {
         const { title, date } = req.body;
         const eventDate = new Date(date);
         
-        const uploadPromises = req.files.map(file => 
-            cloudinary.uploader.upload(file.path)
-                .then(result => {
-                    fs.unlink(file.path, err => {
-                        if (err) console.error('Error deleting file:', err);
-                    });
-                    return result;
-                })
-        );
+        const uploadPromises = req.files.map(file => {
+            return new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: 'auto' },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    }
+                );
+                
+                stream.end(file.buffer);
+            });
+        });
 
         const uploadedImages = await Promise.all(uploadPromises);
         const images = uploadedImages.map((img, index) => ({
