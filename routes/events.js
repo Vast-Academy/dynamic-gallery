@@ -69,4 +69,78 @@ router.get('/types', async (req, res) => {
     }
 });
 
+// Delete a single image from an event
+router.delete('/images/:eventId/:imageId', async (req, res) => {
+    try {
+        const { eventId, imageId } = req.params;
+        
+        // Find the event
+        const event = await Event.findById(eventId);
+        
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+        
+        // Find the image index in the event's images array
+        const imageIndex = event.images.findIndex(img => img._id.toString() === imageId);
+        
+        if (imageIndex === -1) {
+            return res.status(404).json({ error: 'Image not found in event' });
+        }
+        
+        // Get image public_id before removing it
+        const publicId = event.images[imageIndex].public_id;
+        
+        // Delete from Cloudinary if public_id exists
+        if (publicId) {
+            try {
+                await cloudinary.uploader.destroy(publicId);
+            } catch (cloudinaryError) {
+                console.error('Cloudinary delete error:', cloudinaryError);
+                // Continue with database deletion even if Cloudinary fails
+            }
+        }
+        
+        // Remove the image from the array
+        event.images.splice(imageIndex, 1);
+        
+        // Save the updated event
+        await event.save();
+        
+        res.json({ message: 'Image deleted successfully' });
+    } catch (error) {
+        console.error('Delete image error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete an entire event with all its images
+router.delete('/:eventId', async (req, res) => {
+    try {
+        const { eventId } = req.params;
+        
+        // Find the event
+        const event = await Event.findById(eventId);
+        
+        if (!event) {
+            return res.status(404).json({ error: 'Event not found' });
+        }
+        
+        // Delete all images from Cloudinary
+        const deletePromises = event.images.map(image => 
+            cloudinary.uploader.destroy(image.public_id)
+        );
+        
+        await Promise.all(deletePromises);
+        
+        // Delete the event from the database
+        await Event.findByIdAndDelete(eventId);
+        
+        res.json({ message: 'Event deleted successfully' });
+    } catch (error) {
+        console.error('Delete event error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = router;
